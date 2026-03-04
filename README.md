@@ -1,5 +1,5 @@
 # Quick Install Link
-https://github.com/Eli-Zac/YouTube-Music-Metedata-Fix/raw/refs/heads/main/YTMusicMetadataFix.user.js
+https://greasyfork.org/en/scripts/568349-youtube-music-metadata-fix
 
 # About This Script
 This Tampermonkey userscript ensures that YouTube Music always provides full, accurate track metadata to your system and extensions. It fixes issues where Windows media controls and tools like [Web Scrobbler](https://webscrobbler.com/) only see partial track information.
