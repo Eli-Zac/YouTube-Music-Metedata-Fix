@@ -40,8 +40,8 @@
         const bylineText = byline.textContent.trim();
         const parts = bylineText.split('•').map(p => p.trim());
         
-        const artist = parts[0] || '';  // First part is always the artist
-        const album = parts[1] || '';   // Second part is the album
+        const artist = parts[0] || ''; // First part is always the artist
+        const album = parts[1] || '';  // Second part is the album
 
         return { title, artist, album };
     }
