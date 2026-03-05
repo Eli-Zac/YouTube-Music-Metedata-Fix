@@ -1,15 +1,13 @@
 // ==UserScript==
 // @name         YouTube Music Metadata Fix
-// @namespace    https://github.com/Eli-Zac/YouTube-Music-Metedata-Fix
-// @version      1.0.4
+// @namespace    https://github.com/Eli-Zac/YouTube-Music-Metadata-Fix
+// @version      1.5
 // @description  Ensures full track metadata (title, artist, album) is correctly set in MediaSession and Web Scrobbler for YouTube Music.
 // @author       Eli_Zac
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=music.youtube.com
 // @match        https://music.youtube.com/*
 // @run-at       document-start
 // @license      MIT
-// @updateURL    https://github.com/Eli-Zac/YouTube-Music-Metedata-Fix/raw/refs/heads/main/YTMusicMetadataFix.user.js
-// @downloadURL  https://github.com/Eli-Zac/YouTube-Music-Metedata-Fix/raw/refs/heads/main/YTMusicMetadataFix.user.js
 // ==/UserScript==
 
 (function () {
@@ -231,7 +229,7 @@
             return;
         }
 
-        log('=== YouTube Music Metadata Fix v2.0.0 Initialized ===');
+        log('=== YouTube Music Metadata Fix Initialized ===');
 
         // Patch the mediaSession setter
         patchMediaSessionSetter();
