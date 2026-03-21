@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Music Metadata Fix
 // @namespace    https://github.com/Eli-Zac/YouTube-Music-Metadata-Fix
-// @version      1.5
+// @version      1.6
 // @description  Ensures full track metadata (title, artist, album) is correctly set in MediaSession and Web Scrobbler for YouTube Music.
 // @author       Eli_Zac
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=music.youtube.com
@@ -24,6 +24,24 @@
         if (DEBUG) console.log('[YTM Metadata Fix]', ...args);
     }
 
+    function debounce(fn, delay) {
+        let timer;
+        return function (...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    /**
+     * Extract only the primary artist from a potentially multi-artist string
+     */
+    function extractPrimaryArtist(artistText) {
+        if (!artistText) return '';
+
+        const separators = /\s+(?:&|,|feat\.?|ft\.?|featuring|x)\s+/i;
+        return artistText.split(separators)[0].trim();
+    }
+
     /**
      * Extract metadata from the player bar DOM elements
      */
@@ -34,18 +52,33 @@
 
         const title = titleEl.textContent.trim();
 
-        // Parse byline text using bullet separator (•) instead of link order
-        // Format is typically: "Artist • Album • Year" or "Artist • Album"
-        // In video mode: "Artist • Views • Likes" (need to filter out engagement metrics)
-        const bylineText = byline.textContent.trim();
-        const parts = bylineText.split('•').map(p => p.trim());
+        // Use anchor hrefs to reliably distinguish artists from albums:
+        //   - Artist links point to  channel/...  (each separate artist gets its own <a>)
+        //   - Album  links point to  browse/...
+        // A band name like "Angus & Julia Stone" is ONE <a> tag, so we get the full name.
+        // Separate artists like "Kendrick Lamar & SZA" are TWO <a> tags; we take only the first.
+        let artist = '';
+        let album = '';
 
-        // Filter out engagement metrics (Views, Likes, Comments, etc.)
-        const engagementPatterns = /^[\d.]+[KMB]?\s*(Views?|Likes?|Comments?|Shares?)$/i;
-        const metadataParts = parts.filter(part => !engagementPatterns.test(part));
+        const links = byline.querySelectorAll('a');
+        for (const link of links) {
+            const href = link.getAttribute('href') || '';
+            if (!artist && href.includes('channel/')) {
+                artist = link.textContent.trim();
+            } else if (!album && href.includes('browse/')) {
+                album = link.textContent.trim();
+            }
+        }
 
-        const artist = metadataParts[0] || ''; // First part is always the artist
-        const album = metadataParts[1] || ''; // Second part is the album
+        // Fallback to text parsing if DOM links are unavailable (e.g. video mode)
+        if (!artist) {
+            const bylineText = byline.textContent.trim();
+            const parts = bylineText.split('•').map(p => p.trim());
+            const engagementPatterns = /^[\d.]+[KMB]?\s*(Views?|Likes?|Comments?|Shares?)$/i;
+            const metadataParts = parts.filter(part => !engagementPatterns.test(part));
+            artist = extractPrimaryArtist(metadataParts[0] || '');
+            album = album || metadataParts[1] || '';
+        }
 
         return { title, artist, album };
     }
@@ -107,9 +140,10 @@
             isOurUpdate = false;
         }
 
-        // Dispatch events to notify Web Scrobbler
+        // Dispatch events to notify Web Scrobbler only on actual track changes,
+        // not on periodical syncs where nothing changed (avoids spurious play events)
         const videoElement = document.querySelector('video');
-        if (videoElement) {
+        if (videoElement && isNewTrack) {
             dispatchWebScrobblerEvents(videoElement);
         }
 
@@ -149,6 +183,11 @@
                             value.artist = data.artist;
                             value.album = data.album;
                             log('Patched mediaSession metadata:', data);
+                        } else {
+                            // DOM unavailable — pass value through untouched.
+                            // We cannot safely split artist names without the DOM
+                            // (e.g. "Angus & Julia Stone" is one artist, not two).
+                            log('DOM unavailable, passing mediaSession value through unchanged');
                         }
                         descriptor.set.call(this, value);
                     }, 0);
@@ -171,9 +210,9 @@
             return false;
         }
 
-        const observer = new MutationObserver(() => {
+        const observer = new MutationObserver(debounce(() => {
             pushMetadataToMediaSessionAndScrobbler('playerBarMutation');
-        });
+        }, 150));
 
         observer.observe(playerBar, {
             childList: true,
@@ -234,9 +273,14 @@
         // Patch the mediaSession setter
         patchMediaSessionSetter();
 
-        // Set up observers
-        const playerBarObserverStarted = observePlayerBarChanges();
-        const videoObserverStarted = observeVideoSourceChanges();
+        // Set up observers — retry every 500ms if elements aren't in the DOM yet
+        (function startObservers(barDone, vidDone) {
+            if (!barDone) barDone = observePlayerBarChanges();
+            if (!vidDone) vidDone = observeVideoSourceChanges();
+            if (!barDone || !vidDone) {
+                setTimeout(() => startObservers(barDone, vidDone), 500);
+            }
+        })(false, false);
 
         // Initial metadata sync (detects first track)
         setTimeout(() => {
